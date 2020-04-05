@@ -1989,15 +1989,15 @@ struct text_object *construct_text_object(char *s, const char *arg, long line,
 /*
  * - assumes that *string is '#'
  * - removes the part from '#' to the end of line ('\n' or '\0')
- * - it removes the '\n'
+ * - it removes the '\n' iff consumeNewline is true
  * - copies the last char into 'char *last' argument, which should be a pointer
  *   to a char rather than a string.
  */
-static size_t remove_comment(char *string, char *last) {
+static size_t remove_comment(char *string, char *last, bool consumeNewline) {
   char *end = string;
   while (*end != '\0' && *end != '\n') { ++end; }
   if (last != nullptr) { *last = *end; }
-  if (*end == '\n') { end++; }
+  if (*end == '\n' && consumeNewline) { end++; }
   strfold(string, end - string);
   return end - string;
 }
@@ -2026,6 +2026,7 @@ int extract_variable_text_internal(struct text_object *retval,
   char *tmp_p;
   char *arg = nullptr;
   size_t len = 0;
+  bool commentConsumesNewline = true;
 
   p = strndup(const_p, max_user_text.get(*state) - 1);
   while (text_contains_templates(p) != 0) {
@@ -2048,7 +2049,7 @@ int extract_variable_text_internal(struct text_object *retval,
   line = global_text_lines;
 
   while (*p != 0) {
-    if (*p == '\n') { line++; }
+    if (*p == '\n') { line++; commentConsumesNewline = true; }
     if (*p == '$') {
       *p = '\0';
       obj = create_plain_text(s);
@@ -2141,11 +2142,13 @@ int extract_variable_text_internal(struct text_object *retval,
       strfold(p, 1);
     } else if (*p == '#') {
       char c;
-      if ((remove_comment(p, &c) != 0u) && p >= orig_p && c == '\n') {
+      if ((remove_comment(p, &c, commentConsumesNewline) != 0u) && p >= orig_p && c == '\n') {
         /* if remove_comment removed a newline, we need to 'back up' with p */
         p--;
       }
     }
+    if(commentConsumesNewline && !isspace(*p)) { commentConsumesNewline = false; }
+
     p++;
   }
   obj = create_plain_text(s);
